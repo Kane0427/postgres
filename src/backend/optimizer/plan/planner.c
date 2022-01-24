@@ -245,6 +245,38 @@ static bool group_by_has_partkey(RelOptInfo *input_rel,
 								 List *groupClause);
 static int	common_prefix_cmp(const void *a, const void *b);
 
+/*****************************************************************************
+ *
+ *    MY CODE
+ *
+ *****************************************************************************/
+static void
+dfs(Plan *plan, Plan** deepest_join_node,
+    int* join_node_depth, int depth)
+{
+    if(plan == NULL) {
+        return;
+    }
+    if(plan->type == T_MergeJoin || plan->type == T_NestLoop || plan->type == T_HashJoin) {
+        if(depth > *join_node_depth) {
+            *deepest_join_node = plan;
+            *join_node_depth = depth;
+        }
+    }
+    dfs(plan->lefttree, deepest_join_node,
+        join_node_depth, depth + 1);
+    dfs(plan->righttree, deepest_join_node,
+        join_node_depth, depth + 1);
+}
+
+static Plan *
+get_deepest_join_node(Plan *top_plan)
+{
+    Plan *deepest_join_node = top_plan;
+    int join_node_depth = -1;
+    dfs(top_plan, &deepest_join_node, &join_node_depth, 0);
+    return deepest_join_node;
+}
 
 /*****************************************************************************
  *
@@ -405,6 +437,8 @@ standard_planner(Query *parse, const char *query_string, int cursorOptions,
 	best_path = get_cheapest_fractional_path(final_rel, tuple_fraction);
 
 	top_plan = create_plan(root, best_path);
+
+    //top_plan = get_deepest_join_node(top_plan);
 
 	/*
 	 * If creating a plan for a scrollable cursor, make sure it can run
